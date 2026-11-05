@@ -1,69 +1,73 @@
-import Image from "next/image";
+"use client";
+
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { account, ID } from "./lib/appwrite-client";
+import AdminPanel from "./admin-panel";
+
+type Tier = 1 | 2 | 3 | 4 | 5 | 6;
+type Restaurant = { id: string; name: string; neighborhood: string; city: string; cuisine: string; categories: string[]; averagePrice: number | null; voteCount: number; scoreTotal: number };
+const tiers: { value: Tier; label: string; description: string }[] = [
+  { value: 6, label: "S", description: "destination-worthy" }, { value: 5, label: "A", description: "go out of your way" },
+  { value: 4, label: "B", description: "very good" }, { value: 3, label: "C", description: "solid" },
+  { value: 2, label: "D", description: "only if convenient" }, { value: 1, label: "F", description: "skip it" },
+];
+const preview: Restaurant[] = [
+  ["Lilia", "Williamsburg", "Brooklyn", "Italian", 184, 1036], ["Lucali", "Carroll Gardens", "Brooklyn", "Pizza", 221, 1237], ["Dame", "Greenwich Village", "Manhattan", "Seafood", 142, 722], ["Thai Diner", "Nolita", "Manhattan", "Thai", 163, 709], ["Win Son", "East Williamsburg", "Brooklyn", "Taiwanese", 97, 410], ["Semma", "West Village", "Manhattan", "South Indian", 119, 476], ["Superiority Burger", "East Village", "Manhattan", "Vegetarian", 88, 304], ["Joe’s Pizza", "Greenwich Village", "Manhattan", "Pizza", 313, 1137], ["Crown Shy", "Financial District", "Manhattan", "New American", 73, 204], ["Hamburger America", "SoHo", "Manhattan", "Burgers", 132, 353], ["Veselka", "East Village", "Manhattan", "Ukrainian", 101, 239], ["The Smith", "Multiple locations", "New York", "American", 90, 162],
+].map(([name, neighborhood, city, cuisine, voteCount, scoreTotal], index) => ({ id: `preview-${index}`, name: String(name), neighborhood: String(neighborhood), city: String(city), cuisine: String(cuisine), categories: [], averagePrice: null, voteCount: Number(voteCount), scoreTotal: Number(scoreTotal) }));
+const tierOf = (r: Restaurant) => Math.max(1, Math.min(6, Math.round(r.scoreTotal / r.voteCount || 3))) as Tier;
+const labelOf = (tier: Tier) => tiers.find((item) => item.value === tier)?.label ?? "C";
+const priceLabel = (price: number | null) => price ? "$".repeat(price) : "Price not set";
+const POLL_INTERVAL_MS = 10_000;
+const ACTION_TIMEOUT_MS = 8_000;
+const withTimeout = async <T,>(promise: Promise<T>, message: string) => {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([promise, new Promise<T>((_, reject) => { timeout = setTimeout(() => reject(new Error(message)), ACTION_TIMEOUT_MS); })]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+};
+const fetchWithTimeout = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), ACTION_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (caught) {
+    if (controller.signal.aborted) throw new Error("The request timed out. Please try again.");
+    throw caught;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+};
+const tokenHeaders = async () => { const jwt = await withTimeout(account.createJWT(), "Couldn’t confirm your session. Please try again."); return { Authorization: `Bearer ${jwt.jwt}`, "Content-Type": "application/json" }; };
 
 export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+  const [restaurants, setRestaurants] = useState(preview), [query, setQuery] = useState(""), [tierFilter, setTierFilter] = useState<"All" | Tier>("All"), [categoryFilter, setCategoryFilter] = useState("All"), [priceFilter, setPriceFilter] = useState<"All" | number>("All"), [view, setView] = useState<"tiers" | "master">("tiers");
+  const [user, setUser] = useState<{ $id: string; name: string; email: string } | null>(null), [votes, setVotes] = useState<Record<string, Tier>>({});
+  const [selected, setSelected] = useState<Restaurant | null>(null), [modal, setModal] = useState<"auth" | "vote" | "admin" | null>(null), [authMode, setAuthMode] = useState<"signin" | "signup">("signin"), [isAdmin, setIsAdmin] = useState(false);
+  const [notice, setNotice] = useState("Preview data is shown until your Appwrite database is connected."), [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const refreshInFlight = useRef(false);
+  const loadRestaurants = async (signal?: AbortSignal) => { try { const response = await fetch("/api/restaurants", { cache: "no-store", signal }); if (!response.ok) throw new Error(); const data = await response.json() as { restaurants: Restaurant[] }; setRestaurants(data.restaurants); setNotice(data.restaurants.length ? "Live consensus from Food Tiers voters." : "No restaurants have been added yet."); } catch { if (!signal?.aborted) setNotice("Preview data is shown until your Appwrite database is connected."); } };
+  const loadVotes = async (headers?: Record<string, string>, signal?: AbortSignal) => { try { const response = await fetch("/api/votes", { headers: headers ?? await tokenHeaders(), cache: "no-store", signal }); if (!response.ok) return; const data = await response.json() as { votes: { restaurantId: string; tier: Tier }[] }; setVotes(Object.fromEntries(data.votes.map((vote) => [vote.restaurantId, vote.tier]))); } catch { /* User can continue browsing when their session is stale. */ } };
+  const loadAdmin = async (headers?: Record<string, string>, signal?: AbortSignal) => { try { const response = await fetch("/api/admin", { headers: headers ?? await tokenHeaders(), cache: "no-store", signal }); if (!response.ok) return setIsAdmin(false); const data = await response.json() as { isAdmin: boolean }; setIsAdmin(data.isAdmin); } catch { if (!signal?.aborted) setIsAdmin(false); } };
+  useEffect(() => { loadRestaurants(); account.get().then(async (currentUser) => { setUser(currentUser); const headers = await tokenHeaders(); await Promise.all([loadVotes(headers), loadAdmin(headers)]); }).catch(() => undefined); }, []);
+  useEffect(() => { const refresh = async () => { if (refreshInFlight.current) return; refreshInFlight.current = true; const controller = new AbortController(); const timeout = window.setTimeout(() => controller.abort(), 8_000); try { await loadRestaurants(controller.signal); if (user && !controller.signal.aborted) { const headers = await tokenHeaders(); await Promise.all([loadVotes(headers, controller.signal), loadAdmin(headers, controller.signal)]); } } finally { window.clearTimeout(timeout); refreshInFlight.current = false; } }; const interval = window.setInterval(() => { void refresh(); }, POLL_INTERVAL_MS); const refreshOnFocus = () => { if (document.visibilityState === "visible") void refresh(); }; document.addEventListener("visibilitychange", refreshOnFocus); return () => { window.clearInterval(interval); document.removeEventListener("visibilitychange", refreshOnFocus); }; }, [user]);
+  const ranked = useMemo(() => [...restaurants].sort((a, b) => tierOf(b) - tierOf(a) || b.voteCount - a.voteCount), [restaurants]);
+  const categories = useMemo(() => [...new Set(restaurants.flatMap((restaurant) => restaurant.categories))].sort((a, b) => a.localeCompare(b)), [restaurants]);
+  const visible = useMemo(() => { const term = query.toLowerCase().trim(); return ranked.filter((r) => (tierFilter === "All" || tierOf(r) === tierFilter) && (categoryFilter === "All" || r.categories.includes(categoryFilter)) && (priceFilter === "All" || r.averagePrice === priceFilter) && (!term || `${r.name} ${r.neighborhood} ${r.city} ${r.cuisine} ${r.categories.join(" ")}`.toLowerCase().includes(term))); }, [ranked, tierFilter, categoryFilter, priceFilter, query]);
+  const openRestaurant = (r: Restaurant) => { setSelected(r); setError(""); setModal(user ? "vote" : "auth"); };
+  const handleAuth = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const form = new FormData(event.currentTarget); const email = String(form.get("email") ?? "").trim(), password = String(form.get("password") ?? ""), name = String(form.get("name") ?? "").trim(); setBusy(true); setError(""); const controller = new AbortController(); const timeout = window.setTimeout(() => controller.abort(), ACTION_TIMEOUT_MS); try { if (authMode === "signup") await withTimeout(account.create({ userId: ID.unique(), email, password, name }), "Account creation timed out. Please try again."); await withTimeout(account.createEmailPasswordSession({ email, password }), "Sign-in timed out. Please try again."); const currentUser = await withTimeout(account.get(), "Sign-in timed out. Please try again."); setUser(currentUser); const headers = await tokenHeaders(); await Promise.all([loadVotes(headers, controller.signal), loadAdmin(headers, controller.signal)]); if (controller.signal.aborted) throw new Error("Sign-in timed out. Please try again."); setModal(selected ? "vote" : null); } catch (caught) { setError(caught instanceof Error ? caught.message : "We couldn’t complete that request."); } finally { window.clearTimeout(timeout); setBusy(false); } };
+  const submitVote = async (tier: Tier) => { if (!selected) return; setBusy(true); setError(""); try { const response = await fetchWithTimeout("/api/votes", { method: "POST", headers: await tokenHeaders(), body: JSON.stringify({ restaurantId: selected.id, tier }) }); const data = await response.json() as { error?: string }; if (!response.ok) throw new Error(data.error); setVotes((v) => ({ ...v, [selected.id]: tier })); setModal(null); void loadRestaurants(); } catch (caught) { setError(caught instanceof Error ? caught.message : "Your vote could not be saved."); } finally { setBusy(false); } };
+  const removeVote = async () => { if (!selected) return; setBusy(true); setError(""); try { const response = await fetchWithTimeout(`/api/votes?restaurantId=${encodeURIComponent(selected.id)}`, { method: "DELETE", headers: await tokenHeaders() }); const data = await response.json() as { error?: string }; if (!response.ok) throw new Error(data.error); setVotes((v) => { const next = { ...v }; delete next[selected.id]; return next; }); setModal(null); void loadRestaurants(); } catch (caught) { setError(caught instanceof Error ? caught.message : "Your vote could not be removed."); } finally { setBusy(false); } };
+  const close = () => { setModal(null); setError(""); };
+  return <main>
+    <header className="site-header"><button className="wordmark" onClick={() => setView("tiers")}>food<span>tiers</span><i>●</i></button><nav><button className={view === "tiers" ? "active" : ""} onClick={() => setView("tiers")}>Tier list</button><button className={view === "master" ? "active" : ""} onClick={() => setView("master")}>Master list</button></nav><div className="header-actions">{isAdmin && <button className="manage-button" onClick={() => { setError(""); setModal("admin"); }}>Manage <span>+</span></button>}{user ? <button className="account-button" onClick={() => { account.deleteSession({ sessionId: "current" }).catch(() => undefined); setUser(null); setVotes({}); setIsAdmin(false); }}><span>{user.name?.slice(0, 1) || "U"}</span> Sign out</button> : <button className="account-button" onClick={() => { setSelected(null); setModal("auth"); }}>Sign in <span className="arrow">↗</span></button>}</div></header>
+    <section className="hero"><p className="eyebrow">THE PEOPLE’S FOOD GUIDE <span>•</span> NEW YORK</p><h1>Is it actually good?</h1><p className="hero-copy">No star-chasing. No reservations as personality. Just a shared, honest answer to the only question that matters.</p><div className="hero-meta"><span><b>{restaurants.length}</b> restaurants</span><span><b>{restaurants.reduce((sum, r) => sum + r.voteCount, 0).toLocaleString()}</b> opinions</span><span className="live-dot">Live consensus</span></div></section>
+    <section className="content-shell"><div className="section-heading"><div><p className="section-kicker">{view === "tiers" ? "CURRENT CONSENSUS" : "EVERY RESTAURANT"}</p><h2>{view === "tiers" ? "The tier list" : "Master list"}</h2></div><p className="status-note">{notice}</p></div>
+      {view === "tiers" ? <div className="tier-board">{tiers.map((tier) => <div className={`tier-row tier-${tier.label.toLowerCase()}`} key={tier.value}><div className="tier-label"><strong>{tier.label}</strong><span>{tier.description}</span></div><div className="tier-restaurants">{ranked.filter((r) => tierOf(r) === tier.value).map((r) => <button className="restaurant-chip" key={r.id} onClick={() => openRestaurant(r)}><span className="restaurant-name">{r.name}</span><span className="chip-meta">{r.neighborhood} · {priceLabel(r.averagePrice)} <b>{r.voteCount}</b></span>{votes[r.id] && <span className="your-vote">your vote: {labelOf(votes[r.id])}</span>}</button>) || <span className="empty-tier">Nothing here yet.</span>}</div></div>)}</div> : <div className="master-list"><div className="filter-bar"><label className="search-box"><span>⌕</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search restaurants, cuisines, neighborhoods, categories..." /></label><div className="tier-filter"><button className={tierFilter === "All" ? "selected" : ""} onClick={() => setTierFilter("All")}>All</button>{tiers.map((tier) => <button key={tier.value} className={tierFilter === tier.value ? "selected" : ""} onClick={() => setTierFilter(tier.value)}>{tier.label}</button>)}</div></div><div className="category-filters"><div><span>Category</span><div className="filter-pills"><button className={categoryFilter === "All" ? "selected" : ""} onClick={() => setCategoryFilter("All")}>All</button>{categories.map((category) => <button key={category} className={categoryFilter === category ? "selected" : ""} onClick={() => setCategoryFilter(category)}>{category}</button>)}</div></div><div><span>Average price</span><div className="filter-pills"><button className={priceFilter === "All" ? "selected" : ""} onClick={() => setPriceFilter("All")}>All</button>{[1, 2, 3, 4, 5].map((price) => <button key={price} className={priceFilter === price ? "selected" : ""} onClick={() => setPriceFilter(price)}>{"$".repeat(price)}</button>)}</div></div></div><div className="restaurant-grid">{visible.map((r, index) => <button className="restaurant-card" key={r.id} onClick={() => openRestaurant(r)}><span className={`rank-badge tier-${labelOf(tierOf(r)).toLowerCase()}`}>{labelOf(tierOf(r))}</span><span className="card-main"><strong>{r.name}</strong><small>{r.cuisine} · {r.neighborhood} · {priceLabel(r.averagePrice)}</small>{r.categories.length > 0 && <span className="card-categories">{r.categories.map((category) => <em key={category}>{category}</em>)}</span>}</span><span className="card-rank">#{String(index + 1).padStart(2, "0")}</span><span className="card-footer"><em>{r.voteCount} votes</em><span>{votes[r.id] ? `Your vote: ${labelOf(votes[r.id])}` : "Rate it →"}</span></span></button>)}</div></div>}
+    </section>
+    <section className="how-it-works"><p className="section-kicker">NO NOISE. JUST SIGNAL.</p><div className="steps"><div><span>01</span><h3>Find a place</h3><p>Browse the board or search the full list.</p></div><div><span>02</span><h3>Give it a tier</h3><p>One honest vote, from S through F.</p></div><div><span>03</span><h3>See the verdict</h3><p>Every vote shifts the public consensus.</p></div></div></section>
+    <footer><span>FOOD TIERS © 2026</span><span>Built for people who actually eat here.</span><span>NYC, USA</span></footer>
+    {modal && <div className="modal-backdrop" onMouseDown={close}><section className={`modal ${modal === "admin" ? "admin-modal" : ""}`} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true"><button className="modal-close" onClick={close}>×</button>{modal === "admin" ? <AdminPanel restaurants={ranked} authHeaders={tokenHeaders} onChanged={loadRestaurants} /> : modal === "auth" ? <><p className="section-kicker">YOUR OPINION COUNTS</p><h2>{authMode === "signin" ? "Welcome back." : "Get on the board."}</h2><p className="modal-copy">{authMode === "signin" ? "Sign in to add, edit, or remove your one vote for every restaurant." : "Make your food opinions count. You’ll be able to change your mind anytime."}</p><form onSubmit={handleAuth}>{authMode === "signup" && <input name="name" required placeholder="Your name" />}<input name="email" type="email" required placeholder="Email address" /><input name="password" type="password" minLength={8} required placeholder="Password (8+ characters)" />{error && <p className="form-error">{error}</p>}<button className="primary-button" disabled={busy}>{busy ? "One moment..." : authMode === "signin" ? "Sign in" : "Create account"} <span>→</span></button></form><button className="text-button" onClick={() => { setAuthMode(authMode === "signin" ? "signup" : "signin"); setError(""); }}>{authMode === "signin" ? "New here? Create an account" : "Already have an account? Sign in"}</button></> : selected && <><p className="section-kicker">YOUR TAKE ON</p><h2>{selected.name}</h2><p className="restaurant-subtitle">{selected.cuisine} · {selected.neighborhood} · {priceLabel(selected.averagePrice)}</p>{selected.categories.length > 0 && <div className="modal-categories">{selected.categories.map((category) => <span key={category}>{category}</span>)}</div>}<div className="current-consensus"><span>Current consensus</span><strong className={`tier-${labelOf(tierOf(selected)).toLowerCase()}`}>{labelOf(tierOf(selected))}</strong><em>{selected.voteCount} votes</em></div><p className="modal-copy">{votes[selected.id] ? "Want to revise your take? Pick a new tier or remove your vote." : "Where does it land? One vote per restaurant, always editable."}</p><div className="vote-options">{tiers.map((tier) => <button key={tier.value} className={`vote-option tier-${tier.label.toLowerCase()} ${votes[selected.id] === tier.value ? "chosen" : ""}`} onClick={() => submitVote(tier.value)} disabled={busy}><strong>{tier.label}</strong><span>{tier.description}</span></button>)}</div>{votes[selected.id] && <button className="remove-vote" onClick={removeVote} disabled={busy}>Remove my vote</button>}{error && <p className="form-error">{error}</p>}</>}</section></div>}
+  </main>;
 }

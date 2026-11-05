@@ -1,36 +1,37 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Food Tiers
 
-## Getting Started
+A straightforward, people-powered restaurant tier list. Visitors can browse the public consensus without an account; signed-in users have one editable vote per restaurant.
 
-First, run the development server:
+## Run locally
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+bun install
+bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Appwrite setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Copy `.env.example` to `.env`. The public project values are already included. Add the database ID and an API key with Database read/write scope. The API key remains server-only; never prefix it with `NEXT_PUBLIC_`.
 
-## Learn More
+Create these two tables in the configured TablesDB database:
 
-To learn more about Next.js, take a look at the following resources:
+| Table ID | Required columns |
+| --- | --- |
+| `restaurants` | `name` string (120, required), `city` string (100, required), `neighborhood` string (100, required), `cuisine` string (100, required), `categories` string (400, optional), `averagePrice` integer (1–5, optional), `active` boolean (default `true`, not required), `voteCount` integer (default `0`, not required), `scoreTotal` integer (default `0`, not required) |
+| `votes` | `restaurantId` string (36), `userId` string (36), `tier` integer |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Add a unique index to `votes` that covers `restaurantId` and `userId`, plus a key index on `userId`. Restaurant rows keep the aggregate total and vote count, so the public board never exposes voter identities and can calculate a tier from the rounded average: S=6, A=5, B=4, C=3, D=2, F=1.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Enable email/password authentication and add `http://localhost:3000` as an Appwrite web platform during local development. Before deployment, add the production origin too.
 
-## Deploy on Vercel
+To designate an administrator, add that user’s Appwrite user ID to `APPWRITE_ADMIN_USER_IDS` as a comma-separated list. The protected restaurant API endpoints support create, edit, and archival; only that allowlist can call them.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## API routes
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `GET /api/restaurants` returns active restaurants and their public aggregates.
+- `POST /api/restaurants`, `PATCH /api/restaurants`, and `DELETE /api/restaurants` require an administrator ID.
+- `GET /api/votes`, `POST /api/votes`, and `DELETE /api/votes` require a signed-in Appwrite user. A vote is upserted per restaurant and can always be revised or removed.
+
+The interface falls back to illustrative preview data until the database settings are present, so the design remains reviewable before Appwrite is configured.
